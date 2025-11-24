@@ -49,12 +49,11 @@ cd ADNe_lab_AM/
 ### ASV and Sample Filtering scripts
 
 
-2. Oksanen J, Simpson GL, Blanchet FG, et al. vegan: Community Ecology Package. 2001. v2.6-8. https://CRAN.R-project.org/package=vegan
+1. Oksanen J, Simpson GL, Blanchet FG, et al. vegan: Community Ecology Package. 2001. v2.6-8. https://CRAN.R-project.org/package=vegan
 
-3. Wickham H. Ggplot2: Elegant Graphics for Data Analysis. Second edition. Cham: Springer international publishing; 2016. https://ggplot2.tidyverse.org
+2. Wickham H. Ggplot2: Elegant Graphics for Data Analysis. Second edition. Cham: Springer international publishing; 2016. https://ggplot2.tidyverse.org
 
-4. Wickham H, Averick M, Bryan J, et al. Welcome to the Tidyverse. JOSS. 2019; 4(43):1686. doi: 10.21105/joss.01686
-
+3. Wickham H, Averick M, Bryan J, et al. Welcome to the Tidyverse. JOSS. 2019; 4(43):1686. doi: 10.21105/joss.01686
 
 
 ## CONTACT
