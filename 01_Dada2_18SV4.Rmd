@@ -1,0 +1,296 @@
+---
+title: "Paleocore - 01_Dada1_18SV4"
+author: "Arthur Monjot"
+lang: en
+date: "2025-11-22"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## I. Setup 
+### I.A. Result setup and seed
+We define the working directory in the current directory (where the script is saved) for the R analysis and create a result folder (i.e. *result/*) in which the figures and other results will be generated.
+```{r setup, echo=TRUE, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(123) # Set the seed to a specific value (here 123) in order to insure reproducibility
+# working directory
+getwd() # Display current working directory
+setwd(".") # Set working directory
+if (dir.exists("result/") == FALSE) {system("mkdir -p result/")} # Create result directory if it did not exists anymore
+```
+
+### I.B. Library 
+We import the R packages.
+
+    - dada2: ASV inference
+    - Biostrings: required for DADA2
+    - ShortRead: required for DADA2
+    - tidyverse: data.table manipulation
+    - alpha diversity
+    
+```{r lib, echo=TRUE, message=FALSE, warning=FALSE}
+# Packages
+pkg <- c("dada2","ShortRead","Biostrings","tidyverse","vegan") # create vector containing all dependencies
+lapply(pkg, require, character.only = TRUE) # apply the function "require" which "activate" all packages concatenated in the vector pkg
+```
+Each "TRUE" corresponds to the correct importation of each R package. 
+
+### I.C. Parameter
+We set each parameters for the analysis as well as the output specific name in the results directory.
+```{r set parameters}
+dataBase <- "database/pr2_version_5.1.1_SSU_dada2.fasta.gz" # https://github.com/pr2database/pr2database/releases = Taxonomic databases
+result <- "V4-out" # Name of the output
+maxN <- 0 # Maximum number of ambiguous nucleotides (i.e. N) in reads
+maxEE <- 2 # Expected errors for forward and reverse reads error learning procedure (DADA2)
+minQ <- 2 # Minimum quality value for reads
+minOverlap <- 40 # Minimum length for the overlap of the forward and reverse reads.
+maxMismatch <- 0 # Maximum number of mismatch between the forward and the reverse reads for merging procedure
+Nthread <- 4 # Number of core to use during  steps necessitating multitasking (i.e. paste the "nproc" command in the terminal window to know the number of available core on your computer)
+FWD <- "CCAGCASCYGCGGTAATTCC" # Forward primer sequence
+REV <- "ACTTTCGTTCTTGATYRA" # Reverse primer sequence
+if (dir.exists(paste0("result/",result)) == FALSE) { system(paste0("mkdir -p result/",result)) } # Create the output in the result directory
+```
+
+## II. ASV denoising
+We launch the DADA2 pipeline following the official tutorial (i.e. see: https://www.bioconductor.org/packages/release/bioc/vignettes/dada2/inst/doc/dada2-intro.html)
+
+The first step is to filter the reads that are of low quality and trim the primer sequences present in the reads.
+```{r DADA2 pipeline - step filtering and trimming (1/2), echo=TRUE}
+# Define the forward and reverse fastq files paths
+fnFs <- sort(list.files(path = "./Reads_Clean",pattern="correct_paired_R1.fastq.gz", full.names = TRUE)) # For forward reads
+fnRs <- sort(list.files(path = "./Reads_Clean",pattern="correct_paired_R2.fastq.gz", full.names = TRUE)) # For reverse reads
+
+# Check quality of raw reads
+## Forward
+pdf(paste0("./result/",result,"/Quality_Fs_aggregate.pdf"), width = 6,height = 6) # Open and save pdf file in result directory
+plotQualityProfile(fnFs, aggregate = TRUE) # Add the quality plot figures in the previously generated pdf file
+dev.off() # Close the pdf file
+## Reverse
+pdf(paste0("./result/",result,"/Quality_Rs_aggregate.pdf"), width = 6,height = 6)
+plotQualityProfile(fnRs, aggregate = TRUE)
+dev.off()
+
+# Set path for reads resulted from filtering and trimming procedures
+fnFs.filtN <- file.path("filtN", basename(fnFs)) # Create path for filtered files (i.e. filtN/ subdirectory)
+fnRs.filtN <- file.path("filtN", basename(fnRs))
+
+# Launch filtering and trimming procedure following the previously set parameters
+out <- filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN,
+              maxN = maxN, multithread = Nthread,
+              trimLeft=c(nchar(FWD),nchar(REV)),
+              maxEE=maxEE, minQ = 2,
+              compress=TRUE, verbose=TRUE)
+```
+
+We inspect the quality of reads after filtering and trimming procedure
+```{r DADA2 pipeline - step filtering and trimming (2/2), echo=TRUE}
+# Inspect read quality profiles after trimming and trimming
+## Forward
+pdf(paste0("./result/",result,"/Quality_Fs_filtN_aggregate.pdf"), width = 6,height = 6)
+plotQualityProfile(fnFs.filtN, aggregate = TRUE)
+dev.off()
+## Reverse
+pdf(paste0("./result/",result,"/Quality_Rs_filtN_aggregate.pdf"), width = 6,height = 6)
+plotQualityProfile(fnRs.filtN, aggregate = TRUE)
+dev.off()
+```
+
+DADA2 have to learn the error rate for each type of reads to infer amplicon sequence variant
+```{r DADA2 pipeline - error learning, echo=TRUE}
+# Learn the Error Rates
+## Forward
+errF <- learnErrors(fnFs.filtN, multithread=Nthread, nbases = 1e8) # Launch the error learning procedure for the forward reads
+pdf(paste0("./result/",result,"/Quality_Fs_score.pdf"),width = 8,height = 8)
+plotErrors(errF, nominalQ=TRUE)
+dev.off()
+## Reverse
+errR <- learnErrors(fnRs.filtN, multithread=Nthread, nbases = 1e8) # Launch the error learning procedure for the reverse reads
+pdf(paste0("./result/",result,"/Quality_Rs_score.pdf"),width = 8,height = 8)
+plotErrors(errR, nominalQ=TRUE)
+dev.off()
+# ASV Inference
+dadaFs <- dada(fnFs.filtN, err=errF, multithread=Nthread) # Launch the ASV inference procedure for the forward reads
+dadaRs <- dada(fnRs.filtN, err=errR, multithread=Nthread) # Launch the ASV inference procedure for the forward reads
+```
+
+We have to merge the forward and reverse reads using the previously set parameters and launch chimera removing procedure.
+```{r DADA2 pipeline - Merging and chimera removing, echo=TRUE}
+# Merge paired reads
+mergers <- mergePairs(dadaFs, fnFs.filtN, dadaRs, fnRs.filtN, verbose=TRUE, minOverlap = minOverlap, maxMismatch = maxMismatch)
+# Construct sequence table
+seqtab <- makeSequenceTable(mergers)
+# Remove chimeras
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=Nthread, verbose=TRUE)
+```
+
+```{r DADA2 pipeline - Report statistics, echo=TRUE}
+# Track each step
+getN <- function(x) sum(getUniques(x)) # Create a function displaying, when used, the number of unique sequences in the object "x"
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim)) # Launch the previously generated "getN()" function on each object representing each step of the DADA2 pipeline and combine the result within a "track" data.table
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim") # rename the column of the "track" data.table
+rownames(track) <- sub("_.*","", rownames(track)) # rename the row of the "track" data.table using only the SAMEA_ID
+write.table(track, file = paste0("./result/",result,"/track.txt"), sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE) # Save the table in the result directory
+```
+
+Finally, we have to performed taxonomic classification. ⚠️ Don't launch these steps during the lessons as it takes very long time.
+```{r DADA2 pipeline - Taxonomic assignation, echo=TRUE}
+# Assign taxonomy
+taxa <- assignTaxonomy(seqtab.nochim, dataBase, multithread=Nthread) # Launch the taxonomic classification (be careful, this procedure takes a very long time)
+taxa.table <- as.data.frame(taxa) # Transform the result matrix in a data.frame object 
+colnames(taxa.table) <- c("Domain","Kingdom","Division","Subdivision","Class","Order","Family","Genus","Species") # Rename the column in order to fit with the taxonomic level used in the PR2 taxonomy 
+taxa.table[,"Taxonomy"] <- apply(taxa.table, 1, paste, collapse = ";") # Create a new column combining each PR2 taxonomic level (each column)
+taxa.table$Sequences <- rownames(taxa.table) # Save sequences of ASVs in a column entitled "Sequences"
+```
+
+⚠️ Since you didn't launched the previous classification step, you haven't to launch these steps
+```{r DADA2 pipeline - Prepare ASVs table, echo=TRUE}
+# Prepare ASV table
+seqtab.nochim.table <- as.data.frame(t(seqtab.nochim)) # Transposed the table containing the ASVs without chimeric sequences
+colnames(seqtab.nochim.table) <- sub("_.*","", colnames(seqtab.nochim.table)) # rename the column of the table using only the SAMEA_ID
+seqtab.nochim.table$Sequences <- rownames(seqtab.nochim.table)
+
+## Combine
+ASV.table <- merge(seqtab.nochim.table,taxa.table[c("Taxonomy", "Sequences")],by = "Sequences") # Merge the table containing the number of each ASV in each sample with the taxonomic classification results
+rownames(ASV.table) <- paste("ASV",1:nrow(seqtab.nochim.table),sep ="_") # Create a new name for ASV (i.e. ASV_1, ASV_2, etc.)
+write.table(ASV.table, file = paste0("./result/",result,"/ASV_table.csv"), sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
+
+# Save Rdata
+save.image(file = "ADNe_lab_AM.RData") # Save the R image (all the R environment)
+```
+
+Just load the R image present in your woking directory.
+```{r DADA2 pipeline - Charge ASVs table, echo=TRUE}
+load(file = "ADNe_lab_AM.RData") # Load the previously saved R image
+```
+
+## III. Biostatistical analysis
+
+On this third part, we also implement the tidyverse packages for data manipulation (see the pipe : **%>%**) as well as the ggplot package for visualization.
+
+### III.A. Import table and metadata
+Import the metadata file and create a table recording only ASV abundance within samples
+```{r charge metadata and create sub-table for ASV.table, echo=TRUE}
+# Metadata
+metadata <- read.csv(file = paste0("metadata.csv"),sep=";",header = TRUE) # Open the metadata file
+# raw table
+ASV.table.raw <- ASV.table %>% select(-Sequences,-Taxonomy) # Save only ASVs abundance within samples in a dedicated table
+```
+
+Discover the ASV table
+```{r first info, echo=TRUE}
+dim(ASV.table.raw) # Display number of lines (OTUs) and columns (samples)
+sum(ASV.table.raw) # Display the number of total reads
+colSums(ASV.table.raw) # Display the number of reads by sample
+rowSums(ASV.table.raw) # Display the number of reads by OTU
+colnames(ASV.table.raw) # Display the sample Id (columns)
+```
+
+### III.B. Rarefaction curves
+Processed the rarefaction curves to assess the sequencing performance
+```{r rarefaction curve, echo=TRUE}
+pdf(file=paste0("./result/",result,"/rarefaction_curve.pdf"),width = 8,height = 8) # Open and save pdf file in result directory
+rarecurve(t(ASV.table.raw),step=100, ylab = "ASV#", xlab = "Illumina reads#") # add rarefaction curve figure to the previously created pdf
+dev.off() # close the pdf file
+```
+Some sample are characterized by a very low amount of sequence...
+
+### III.C. Alpha diversity
+
+Assess the alpha diversity measure for each samples
+```{r alpha diversity, echo=TRUE}
+# Abundance
+metadata <- merge(metadata,data.frame(Abundance=colSums(ASV.table.raw)) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add abundance value in a new column of the metadata file
+# Richness (i.e. the number of OTUs within a sample)
+ASV.table.raw.pa <- as.data.frame(ASV.table.raw) # Duplicate ASV.table.raw in ASV.table.raw.pa
+ASV.table.raw.pa[ASV.table.raw.pa>0]<-1 # Transform value > 1 by 1
+metadata <- merge(metadata,data.frame(Richness=colSums(ASV.table.raw.pa)) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add specific richness value in a new column of the metadata file
+# Shannon index
+metadata <- merge(metadata,data.frame(Shannon=diversity(t(ASV.table.raw), index = "shannon")) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add Shannon index in a new column of the metadata file
+# Plot
+## Abundance
+ggplot(metadata, aes(y=Abundance,x = Site)) + geom_boxplot() + geom_point(aes(color=Date)) # Create a ggplot blank page + create a boxplot using the Abundance column for y-axis and the Site column for the x-axis + add point with colors depending on the Date column
+ggsave(paste0("./result/",result,"/Abundance_boxplot.pdf"), width=6, height=6) # Save the resulting ggplot page
+## Richness
+ggplot(metadata, aes(y=Richness,x = Site)) + geom_boxplot() + geom_point(aes(color=Date))
+ggsave(paste0("./result/",result,"/Richness_boxplot.pdf"), width=6, height=6)
+## Shannon
+ggplot(metadata, aes(y=Shannon,x = Site)) + geom_boxplot() + geom_point(aes(color=Date))
+ggsave(paste0("./result/",result,"/Shannon_boxplot.pdf"), width=6, height=6)
+```
+They are no differences in terms of alpha diversity between sites (Athens vs Turku).
+
+As see before on rarefaction curves, some samples are characterized by a very low amount of sequences.
+
+The richness appear to be correlated with the datation of the samples (at least for Athens).
+
+### III.D. Sample filtration and data normalisation
+Since few samples seems to be very poor in sequences, we should remove them as they can introduce some biases during the biodiversity analysis.
+
+
+
+
+To efficiently compare samples, we should (not mandatory) to normalize them. It exists different methods (not exhaustive):
+
+    - Rarefaction
+    
+    - Cumulative Sum Scaling (CSS)
+    
+    - Centered-log ratio transformation (CLR)
+
+Here we use rarefaction which re-sampling to the same depth (i.e. the abundance of the smallest sample) all samples.
+
+```{r Rarefaction, echo=TRUE}
+ASV.table.raw.t <- as.data.frame(t(ASV.table.raw)) # Create transposed OTU table
+minsample <- min(rowSums(ASV.table.raw.t)) # save the abundance of the smallest sample in "minsample"
+ASV.table.rare.t <- rrarefy(ASV.table.raw.t,sample=minsample) # Rarefy the transposed OTU table by the abundance of the smallest sample
+ASV.table.rare <- t(ASV.table.rare.t) # transpose the transposed rarefied OTU table
+colSums(ASV.table.rare) # Display the number of reads by sample
+```
+
+
+### III.E. Beta diversity analysis
+```{r beta diversity, echo=TRUE}
+# NMDS - Beta-diversity
+dt <- as.data.frame(t(ASV.table.raw)) # We create a new data frame 'dt' that corresponded to the filtered, normalized and transposed OTU table.
+dt <- merge(dt, metadata, by.x = "row.names", by.y = "SAMEA_ID") # We combine this transposed (lines are samples) OTU table with the metadata
+row.names(dt) <- dt$Row.names # Previous merging step removed row.names and created a "Row.names" column. We have to re-edit them.
+dtx <- dt %>% select(starts_with("ASV_")) # We remove the "Row.names" column as well as the Condition column before distance matrix generation
+dist <- vegdist(dtx, method ="bray") # We compute the distance of Bray-Curtis between each pair of samples
+NMDS_tab=metaMDS(dist, parralel = 10, k=3) # We process the NMDS using the previously generated distance matrix
+# Plot
+Condition <-dt$Site
+plot(NMDS_tab,display = "sites")
+ordihull(NMDS_tab,groups = Condition,label = T)
+orditorp(NMDS_tab,display="sites")
+stress_value <- round(NMDS_tab$stress, 3)
+text(x = par("usr")[2] - 0.02 * diff(par("usr")[1:2]),
+     y = par("usr")[3] + 0.02 * diff(par("usr")[3:4]),
+     labels = paste("Stress:", stress_value),
+     adj = c(1, 0))
+
+
+
+scores(NMDS_tab) %>%
+cbind(alpha_diversity_table) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  geom_point(aes(color = Date, shape = Site)) +
+  stat_ellipse(geom = "polygon", aes(group = Site, fill = Site), alpha = 0.3, level = 0.95, color = "black") +
+  annotate("text", x = min(scores(NMDS_tab)-0.2), y = min(scores(NMDS_tab)+0.2), label = paste0("stress: ", format(NMDS_tab$stress, digits = 4)), hjust = 0) +
+  theme_bw()
+
+Condition <-dt$Date
+
+res <- adonis2(dist ~ Site + Date, data = dt, by = "margin")
+res
+
+```
+
+
+
+
+
+
+
+
+
