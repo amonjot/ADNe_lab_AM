@@ -11,7 +11,7 @@ output:
 ## I. Setup 
 ### I.A. Result setup and seed
 We define the working directory in the current directory (where the script is saved) for the R analysis and create a result folder (i.e. *result/*) in which the figures and other results will be generated.
-```{r setup, echo=TRUE, include=TRUE}
+```{r Setup, echo=TRUE, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
 set.seed(123) # Set the seed to a specific value (here 123) in order to insure reproducibility
 # working directory
@@ -29,7 +29,7 @@ We import the R packages.
     - tidyverse: data.table manipulation
     - alpha diversity
     
-```{r lib, echo=TRUE, message=FALSE, warning=FALSE}
+```{r Lib, echo=TRUE, message=FALSE, warning=FALSE}
 # Packages
 pkg <- c("dada2","ShortRead","Biostrings","tidyverse","vegan") # create vector containing all dependencies
 lapply(pkg, require, character.only = TRUE) # apply the function "require" which "activate" all packages concatenated in the vector pkg
@@ -38,7 +38,7 @@ Each "TRUE" corresponds to the correct importation of each R package.
 
 ### I.C. Parameter
 We set each parameters for the analysis as well as the output specific name in the results directory.
-```{r set parameters}
+```{r Set parameters}
 dataBase <- "database/pr2_version_5.1.1_SSU_dada2.fasta.gz" # https://github.com/pr2database/pr2database/releases = Taxonomic databases
 result <- "V4-out" # Name of the output
 maxN <- 0 # Maximum number of ambiguous nucleotides (i.e. N) in reads
@@ -170,7 +170,7 @@ On this third part, we also implement the tidyverse packages for data manipulati
 
 ### III.A. Import table and metadata
 Import the metadata file and create a table recording only ASV abundance within samples
-```{r charge metadata and create sub-table for ASV.table, echo=TRUE}
+```{r Import metadata and create sub-table for ASV.table, echo=TRUE}
 # Metadata
 metadata <- read.csv(file = paste0("metadata.csv"),sep=";",header = TRUE) # Open the metadata file
 # raw table
@@ -178,7 +178,7 @@ ASV.table.raw <- ASV.table %>% select(-Sequences,-Taxonomy) # Save only ASVs abu
 ```
 
 Discover the ASV table
-```{r first info, echo=TRUE}
+```{r First info, echo=TRUE}
 dim(ASV.table.raw) # Display number of lines (OTUs) and columns (samples)
 sum(ASV.table.raw) # Display the number of total reads
 colSums(ASV.table.raw) # Display the number of reads by sample
@@ -188,7 +188,7 @@ colnames(ASV.table.raw) # Display the sample Id (columns)
 
 ### III.B. Rarefaction curves
 Processed the rarefaction curves to assess the sequencing performance
-```{r rarefaction curve, echo=TRUE}
+```{r Rarefaction curve, echo=TRUE}
 pdf(file=paste0("./result/",result,"/rarefaction_curve.pdf"),width = 8,height = 8) # Open and save pdf file in result directory
 rarecurve(t(ASV.table.raw),step=100, ylab = "ASV#", xlab = "Illumina reads#") # add rarefaction curve figure to the previously created pdf
 dev.off() # close the pdf file
@@ -198,7 +198,7 @@ Some sample are characterized by a very low amount of sequence...
 ### III.C. Alpha diversity
 
 Assess the alpha diversity measure for each samples
-```{r alpha diversity, echo=TRUE}
+```{r Alpha diversity, echo=TRUE}
 # Abundance
 metadata <- merge(metadata,data.frame(Abundance=colSums(ASV.table.raw)) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add abundance value in a new column of the metadata file
 # Richness (i.e. the number of OTUs within a sample)
@@ -224,11 +224,28 @@ As see before on rarefaction curves, some samples are characterized by a very lo
 
 The richness appear to be correlated with the datation of the samples (at least for Athens).
 
-### III.D. Sample filtration and data normalisation
-Since few samples seems to be very poor in sequences, we should remove them as they can introduce some biases during the biodiversity analysis.
+### III.D. Sample and ASV filtration
+Since few samples seems to be very poor in sequences, we should remove them as they can introduce some biases during the biodiversity analysis. We have to set a threshold (often, arbitrarily).
 
+Here, We choose to remove samples accounting less than 5,000 sequences.
 
+```{r sample filtration, echo=TRUE}
+ASV.table.raw.filt <- ASV.table.raw[,which(colSums(ASV.table.raw)>5000)]
+```
 
+Since some ASVs may correspond to sequencing errors (despite the previous precautions), we should choose to remove those characterized by a low amount of sequences. It exists different methods (not exhaustive):
+
+    - Remove those gathering only one or less than x sequences (e.g. x = 2)
+    
+    - Remove those gathering less than 5% of the dataset sequence amount (Bokulich et al., 2013)
+    
+    - Remove those represented in only one sample
+
+```{r ASV filtration, echo=TRUE}
+ASV.table.raw.filt.ss<-ASV.table.raw.filt[which(rowSums(ASV.table.raw.filt)>2),] # Remove doubleton
+```
+
+### III.E. Data normalisation
 
 To efficiently compare samples, we should (not mandatory) to normalize them. It exists different methods (not exhaustive):
 
@@ -241,21 +258,21 @@ To efficiently compare samples, we should (not mandatory) to normalize them. It 
 Here we use rarefaction which re-sampling to the same depth (i.e. the abundance of the smallest sample) all samples.
 
 ```{r Rarefaction, echo=TRUE}
-ASV.table.raw.t <- as.data.frame(t(ASV.table.raw)) # Create transposed OTU table
-minsample <- min(rowSums(ASV.table.raw.t)) # save the abundance of the smallest sample in "minsample"
-ASV.table.rare.t <- rrarefy(ASV.table.raw.t,sample=minsample) # Rarefy the transposed OTU table by the abundance of the smallest sample
-ASV.table.rare <- t(ASV.table.rare.t) # transpose the transposed rarefied OTU table
-colSums(ASV.table.rare) # Display the number of reads by sample
+ASV.table.raw.filt.ss.t <- as.data.frame(t(ASV.table.raw.filt.ss)) # Create transposed OTU table
+minsample <- min(rowSums(ASV.table.raw.filt.ss.t)) # save the abundance of the smallest sample in "minsample"
+ASV.table.rare.filt.ss.t <- rrarefy(ASV.table.raw.filt.ss.t,sample=minsample) # Rarefy the transposed OTU table by the abundance of the smallest sample
+ASV.table.rare.filt.ss <- t(ASV.table.rare.filt.ss.t) # transpose the transposed rarefied OTU table
+colSums(ASV.table.rare.filt.ss) # Display the number of reads by sample
 ```
 
 
-### III.E. Beta diversity analysis
-```{r beta diversity, echo=TRUE}
+### III.F. Beta diversity analysis
+```{r Beta diversity, echo=TRUE}
 # NMDS - Beta-diversity
-dt <- as.data.frame(t(ASV.table.raw)) # We create a new data frame 'dt' that corresponded to the filtered, normalized and transposed OTU table.
+dt <- as.data.frame(t(ASV.table.rare.filt.ss)) # We create a new data frame 'dt' that corresponded to the filtered, normalized and transposed OTU table.
 dt <- merge(dt, metadata, by.x = "row.names", by.y = "SAMEA_ID") # We combine this transposed (lines are samples) OTU table with the metadata
-row.names(dt) <- dt$Row.names # Previous merging step removed row.names and created a "Row.names" column. We have to re-edit them.
-dtx <- dt %>% select(starts_with("ASV_")) # We remove the "Row.names" column as well as the Condition column before distance matrix generation
+dt <- dt %>% column_to_rownames("Row.names") # Previous merging step removed row.names and created a "Row.names" column. We have to re-edit them.
+dtx <- dt %>% select(starts_with("ASV_")) # We remove the metadata column before distance matrix generation
 dist <- vegdist(dtx, method ="bray") # We compute the distance of Bray-Curtis between each pair of samples
 NMDS_tab=metaMDS(dist, parralel = 10, k=3) # We process the NMDS using the previously generated distance matrix
 # Plot
