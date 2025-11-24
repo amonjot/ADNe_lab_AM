@@ -12,6 +12,15 @@
 ## **Repository structure:**
 
         Paleocore
+        ├── 01_Dada2_18SV4.Rmd
+        ├── ADNe_lab_AM.RData
+        ├── README.md
+        ├── Reads_Clean
+        ├── assets
+        │   └── Map_paleocore.png
+        ├── database
+        │   └── pr2_version_5.1.1_SSU_dada2.fasta.gz
+        └── metadata.csv
         
 
 ## **Clone repository:**
