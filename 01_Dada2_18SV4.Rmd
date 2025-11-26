@@ -13,11 +13,11 @@ output:
 We define the working directory in the current directory (where the script is saved) for the R analysis and create a result folder (i.e. *result/*) in which the figures and other results will be generated.
 ```{r Setup, echo=TRUE, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
-set.seed(123) # Set the seed to a specific value (here 123) in order to insure reproducibility
+set.seed(123) # Set the seed to a specific value (here 123) in order to ensure reproducibility
 # working directory
 getwd() # Display current working directory
 setwd(".") # Set working directory
-if (dir.exists("result/") == FALSE) {system("mkdir -p result/")} # Create result directory if it did not exists anymore
+if (dir.exists("result/") == FALSE) {system("mkdir -p result/")} # Create result directory if it does not already exists
 ```
 
 ### I.B. Library 
@@ -43,7 +43,7 @@ We set each parameters for the analysis as well as the output specific name in t
 dataBase <- "database/pr2_version_5.1.1_SSU_dada2.fasta.gz" # https://github.com/pr2database/pr2database/releases = Taxonomic databases
 result <- "V4-out" # Name of the output
 maxN <- 0 # Maximum number of ambiguous nucleotides (i.e. N) in reads
-maxEE <- 2 # Expected errors for forward and reverse reads error learning procedure (DADA2)
+maxEE <- 2 # Maximum expected errors for forward and reverse reads error learning procedure (DADA2)
 minQ <- 2 # Minimum quality value for reads
 minOverlap <- 40 # Minimum length for the overlap of the forward and reverse reads.
 maxMismatch <- 0 # Maximum number of mismatch between the forward and the reverse reads for merging procedure
@@ -56,7 +56,7 @@ if (dir.exists(paste0("result/",result)) == FALSE) { system(paste0("mkdir -p res
 ## II. ASV denoising
 We launch the DADA2 pipeline following the official tutorial (i.e. see: https://www.bioconductor.org/packages/release/bioc/html/dada2.html)
 
-### II.A. Filtring an trimming
+### II.A. Filtering and trimming
 The first step is to filter the reads that are of low quality and trim the primer sequences present in the reads.
 ```{r DADA2 pipeline - step filtering and trimming (1/2), echo=TRUE}
 # Define the forward and reverse fastq files paths
@@ -87,7 +87,7 @@ out <- filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN,
 
 We inspect the quality of reads after filtering and trimming procedure
 ```{r DADA2 pipeline - step filtering and trimming (2/2), echo=TRUE}
-# Inspect read quality profiles after trimming and trimming
+# Inspect read quality profiles after filtering and trimming
 ## Forward
 pdf(paste0("./result/",result,"/Quality_Fs_filtN_aggregate.pdf"), width = 6,height = 6)
 plotQualityProfile(fnFs.filtN, aggregate = TRUE)
@@ -114,7 +114,7 @@ plotErrors(errR, nominalQ=TRUE)
 dev.off()
 # ASV Inference
 dadaFs <- dada(fnFs.filtN, err=errF, multithread=Nthread) # Launch the ASV inference procedure for the forward reads
-dadaRs <- dada(fnRs.filtN, err=errR, multithread=Nthread) # Launch the ASV inference procedure for the forward reads
+dadaRs <- dada(fnRs.filtN, err=errR, multithread=Nthread) # Launch the ASV inference procedure for the reverse reads
 ```
 
 ### II.C. Merging and chimera removing
@@ -139,7 +139,7 @@ write.table(track, file = paste0("./result/",result,"/track.txt"), sep = "\t", c
 ```
 
 ### II.E. Taxonomic classification – ⚠️ Don't launch these steps during the lessons as it takes very long time.
-We have to performed taxonomic classification.
+We have to perform taxonomic classification.
 ```{r DADA2 pipeline - Taxonomic classification, echo=TRUE}
 # Assign taxonomy
 taxa <- assignTaxonomy(seqtab.nochim, dataBase, multithread=Nthread) # Launch the taxonomic classification (be careful, this procedure takes a very long time)
@@ -152,7 +152,7 @@ taxa.table$Sequences <- rownames(taxa.table) # Save sequences of ASVs in a colum
 We combine all files to produce the community matrix (ASVs table) and save the R data image
 ```{r DADA2 pipeline - Prepare ASVs table, echo=TRUE}
 # Prepare ASV table
-seqtab.nochim.table <- as.data.frame(t(seqtab.nochim)) # Transposed the table containing the ASVs without chimeric sequences
+seqtab.nochim.table <- as.data.frame(t(seqtab.nochim)) # Transpose the table containing the ASVs without chimeric sequences
 colnames(seqtab.nochim.table) <- sub("_.*","", colnames(seqtab.nochim.table)) # rename the column of the table using only the SAMEA_ID
 seqtab.nochim.table$Sequences <- rownames(seqtab.nochim.table)
 
@@ -165,14 +165,14 @@ write.table(ASV.table, file = paste0("./result/",result,"/ASV_table.csv"), sep =
 save.image(file = "ADNe_lab_AM.RData") # Save the R image (all the R environment)
 ```
 
-### II.F. Charge the R data image – ⚠️ Launch this step during the lessons to obtained the ASVs table previously produced (see the **II.E. Taxonomic classification** section)
+### II.F. Load the R data image – ⚠️ Launch this step during the lessons to obtain the ASVs table previously produced (see the **II.E. Taxonomic classification** section)
 Just load the R image present in your working directory.
 ```{r DADA2 pipeline - Charge ASVs table, echo=TRUE}
 load(file = "ADNe_lab_AM.RData") # Load the previously saved R image
 ```
 
 ## III. Biostatistical analysis
-On this third part, we also implement the tidyverse packages for data manipulation (see the pipe : **%>%**) as well as the ggplot package for visualization.
+In this third part, we also implement the tidyverse packages for data manipulation (see the pipe : **%>%**) as well as the ggplot package for visualization.
 
 ### III.A. Import table and metadata
 We import the metadata file and create a table recording only ASV abundance within samples
@@ -185,10 +185,10 @@ ASV.table.raw <- ASV.table %>% select(-Sequences,-Taxonomy) # Save only ASVs abu
 
 Discover the ASV table:
 ```{r First info, echo=TRUE}
-dim(ASV.table.raw) # Display number of lines (OTUs) and columns (samples)
+dim(ASV.table.raw) # Display number of lines (ASVs) and columns (samples)
 sum(ASV.table.raw) # Display the number of total reads
 colSums(ASV.table.raw) # Display the number of reads by sample
-rowSums(ASV.table.raw) # Display the number of reads by OTU
+rowSums(ASV.table.raw) # Display the number of reads by ASV
 colnames(ASV.table.raw) # Display the sample Id (columns)
 ```
 
@@ -199,14 +199,14 @@ pdf(file=paste0("./result/",result,"/rarefaction_curve.pdf"),width = 8,height = 
 rarecurve(t(ASV.table.raw),step=100, ylab = "ASV#", xlab = "Illumina reads#") # add rarefaction curve figure to the previously created pdf
 dev.off() # close the pdf file
 ```
-Some sample are characterized by a very low amount of sequence...
+Some samples are characterized by a very low amount of sequence...
 
 ### III.C. Alpha diversity
-Assess the alpha diversity measure for each samples
+Assess the alpha diversity measure for each sample
 ```{r Alpha diversity, echo=TRUE}
 # Abundance
 metadata <- merge(metadata,data.frame(Abundance=colSums(ASV.table.raw)) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add abundance value in a new column of the metadata file
-# Richness (i.e. the number of OTUs within a sample)
+# Richness (i.e. the number of ASVs within a sample)
 ASV.table.raw.pa <- as.data.frame(ASV.table.raw) # Duplicate ASV.table.raw in ASV.table.raw.pa
 ASV.table.raw.pa[ASV.table.raw.pa>0]<-1 # Transform value > 1 by 1
 metadata <- merge(metadata,data.frame(Richness=colSums(ASV.table.raw.pa)) %>% rownames_to_column("SAMEA_ID"), by = "SAMEA_ID") # Add specific richness value in a new column of the metadata file
@@ -223,21 +223,21 @@ ggsave(paste0("./result/",result,"/Richness_boxplot.pdf"), width=6, height=6)
 ggplot(metadata, aes(y=Shannon,x = Site)) + geom_boxplot() + geom_point(aes(color=Date))
 ggsave(paste0("./result/",result,"/Shannon_boxplot.pdf"), width=6, height=6)
 ```
-They are no differences in terms of alpha diversity between sites (Athens vs Turku).
+There are no differences in terms of alpha diversity between sites (Athens vs Turku).
 
-As see before on rarefaction curves, some samples are characterized by a very low amount of sequences.
+As seen before on rarefaction curves, some samples are characterized by a very low amount of sequences.
 
-The richness appear to be correlated with the datation of the samples (at least for Athens).
+The richness appears to be correlated with the datation of the samples (at least for Athens).
 
 ### III.D. Sample and ASV filtration
 Since few samples are characterized by a very low amount of sequences, we should remove them as they can introduce biases during the biodiversity analyses. We have to set a threshold (often, arbitrarily).
 
-Here, We choose to remove samples accounting less than 5,000 sequences.
+Here, we choose to remove samples with fewer than 5,000 sequences.
 ```{r sample filtration, echo=TRUE}
 ASV.table.raw.filt <- ASV.table.raw[,which(colSums(ASV.table.raw)>5000)]
 ```
 
-Since some ASVs may correspond to sequencing errors (despite the previous precautions), we should choose to remove those characterized by a low amount of sequences. It exists different methods (not exhaustive):
+Since some ASVs may correspond to sequencing errors (despite the previous precautions), we should choose to remove those characterized by a low amount of sequences. Several methods exist (non-exhaustive list):
 
     - Remove those gathering only one or less than x sequences (e.g. x = 2)
     
@@ -250,7 +250,7 @@ ASV.table.raw.filt.ss<-ASV.table.raw.filt[which(rowSums(ASV.table.raw.filt)>2),]
 ```
 
 ### III.E. Data normalisation
-To compare samples effectively, we should (though this is not mandatory) normalize them. It exists different methods (not exhaustive):
+To compare samples effectively, we should (though this is not mandatory) normalize them. Several methods exist (non-exhaustive list):
 
     - Rarefaction (not recommended but faster)
     
@@ -258,24 +258,24 @@ To compare samples effectively, we should (though this is not mandatory) normali
     
     - Centered-log ratio transformation (CLR)
 
-Here we use rarefaction which re-sampling to the same depth (i.e. the abundance of the smallest sample) all samples.
+Here we use rarefaction which re-samples all samples to the same sequencing depth (i.e. the abundance of the smallest sample) all samples.
 ```{r Rarefaction, echo=TRUE}
-ASV.table.raw.filt.ss.t <- as.data.frame(t(ASV.table.raw.filt.ss)) # Create transposed OTU table
+ASV.table.raw.filt.ss.t <- as.data.frame(t(ASV.table.raw.filt.ss)) # Create transposed ASV table
 minsample <- min(rowSums(ASV.table.raw.filt.ss.t)) # save the abundance of the smallest sample in "minsample"
-ASV.table.rare.filt.ss.t <- rrarefy(ASV.table.raw.filt.ss.t,sample=minsample) # Rarefy the transposed OTU table by the abundance of the smallest sample
-ASV.table.rare.filt.ss <- t(ASV.table.rare.filt.ss.t) # transpose the transposed rarefied OTU table
-colSums(ASV.table.rare.filt.ss) # Display the number of reads by sample
+ASV.table.rare.filt.ss.t <- rrarefy(ASV.table.raw.filt.ss.t,sample=minsample) # Rarefy the transposed ASV table by the abundance of the smallest sample
+ASV.table.rare.filt.ss <- t(ASV.table.rare.filt.ss.t) # transpose the transposed rarefied ASV table
+colSums(ASV.table.rare.filt.ss) # Display the number of reads by sample, should be the same for each sample (i.e. equal to "minsample")
 ```
 
 
 ### III.F. Beta diversity analysis
 Many different analyses exist to assess the beta-diversity (AFC, PCoA, ACP, NMDS, etc.). Here we choose to compute a Non-metric Multidimensional Scaling (NMDS).
-In many cases, these analyses use a distance matrix. Different types of distance may be used depending on the type and structure of the data. Here, for community table (ASVs table), the Bray-Curtis distance is the more adapted as it is less impacted by a large number of "0" values.
+In many cases, these analyses use a distance matrix. Different types of distance may be used depending on the type and structure of the data. Here, for community table (ASVs table), the Bray-Curtis distance is the most appropriate as it is less impacted by a large number of "0" values.
 
 ```{r Beta diversity, echo=TRUE}
 # NMDS - Beta-diversity
-dt <- as.data.frame(t(ASV.table.rare.filt.ss)) # We create a new data frame 'dt' that corresponded to the filtered, normalized and transposed OTU table.
-dt <- merge(dt, metadata, by.x = "row.names", by.y = "SAMEA_ID") # We combine this transposed (lines are samples) OTU table with the metadata
+dt <- as.data.frame(t(ASV.table.rare.filt.ss)) # We create a new data frame 'dt' corresponding to the filtered, normalized and transposed ASV table.
+dt <- merge(dt, metadata, by.x = "row.names", by.y = "SAMEA_ID") # We combine this transposed (lines are samples) ASV table with the metadata
 dt <- dt %>% column_to_rownames("Row.names") # Previous merging step removed row.names and created a "Row.names" column. We have to re-edit them.
 dtx <- dt %>% select(starts_with("ASV_")) # We remove the metadata column before distance matrix generation
 dist <- vegdist(dtx, method ="bray") # We compute the distance of Bray-Curtis between each pair of samples
@@ -287,7 +287,7 @@ plot(NMDS_tab,display = "sites") # plot only the point
 ordihull(NMDS_tab,groups = Condition,label = T) # plot polygons for each condition (i.e. Site)
 orditorp(NMDS_tab,display="sites") # plot the name of each sample
 stress_value <- round(NMDS_tab$stress, 3) # Compute the stress value of the NMDS
-text(x = par("usr")[2] - 0.02 * diff(par("usr")[1:2]), # Plot the stress value oin the plot
+text(x = par("usr")[2] - 0.02 * diff(par("usr")[1:2]), # Plot the stress value on the plot
      y = par("usr")[3] + 0.02 * diff(par("usr")[3:4]),
      labels = paste("Stress:", stress_value),
      adj = c(1, 0))
@@ -314,17 +314,17 @@ res
 The two factors, Site and Date, have a significant effect on community composition (p < 0.001). Together, they explain approximately 29% of the variance in the dataset (20.0% for Site and 8.5% for Date).
 
 ### III.G. Bar plot for taxonomic classification analysis
-In some case, we want represent the taxonomic affiliation of the organisms present in each samples. A bar plot should help to visualize these data.
+In some cases, we want represent the taxonomic affiliation of the organisms present in each samples. A bar plot should help to visualize these data.
 
 ```{r Plot taxonomy, echo=TRUE, fig.height=12, fig.width=8}
-ASV.table.rare.filt.ss.tax <- merge(ASV.table.rare.filt.ss, ASV.table %>% select(Taxonomy), by = "row.names") # We used the Taxonomy column of the "ASV.table" table to annotate the rarefied and filtered table
+ASV.table.rare.filt.ss.tax <- merge(ASV.table.rare.filt.ss, ASV.table %>% select(Taxonomy), by = "row.names") # We use the Taxonomy column of the "ASV.table" table to annotate the rarefied and filtered table
 ASV.table.rare.filt.ss.tax <- ASV.table.rare.filt.ss.tax %>% column_to_rownames("Row.names")
 ASV.table.rare.filt.ss.tax <- separate(ASV.table.rare.filt.ss.tax,Taxonomy,c("Domain","Kingdom","Division","Subdivision","Class","Order","Family","Genus","Species"),sep=";") # Separate "Taxonomy" column in 9 ranks)
 table_taxo <- ASV.table.rare.filt.ss.tax %>%
-  select(all_of(starts_with("SAMEA")),Domain,Kingdom,Division) %>% # We select only several column : all sample labels and "Class" (3rd taxonomic rank)
-  group_by(Domain,Kingdom,Division) %>% # We group all row by Class : rows with the same Class will be combine in one row
-  summarise_all(sum) %>% # Sequences account of rows of the same Class will be sums up
-  gather(SAMEA_ID,Abundance,-Domain,-Kingdom,-Division) # We transpose the contingency table to edit a new table with three columns : Class | Amplicon | Abundance of reads
+  select(all_of(starts_with("SAMEA")),Domain,Kingdom,Division) %>% # We select only several column : all sample labels and "Division" (3rd taxonomic rank)
+  group_by(Domain,Kingdom,Division) %>% # We group all row by Division : rows with the same Division will be combined into one row
+  summarise_all(sum) %>% # Sequences account of rows of the same Division will be summed up
+  gather(SAMEA_ID,Abundance,-Domain,-Kingdom,-Division) # We transpose the contingency table to edit a new table with three columns : Division | Amplicon name | Abundance of reads
 # Implement conditions from the metadata table
 table_taxo <- merge(table_taxo,metadata %>% select(SAMEA_ID,Site,Date, Confidence),by="SAMEA_ID")
 # Plot
