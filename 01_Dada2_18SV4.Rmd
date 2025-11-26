@@ -306,7 +306,6 @@ ggsave(paste0("./result/",result,"/NMDS.pdf"), width=6, height=6)
 
 Even though the effect of Site and Date conditions on the beta-diversity are clear on the graph, we want to know if is significant. Here we use a PERMANOVA (i.e. Permutational Multivariate Analysis of Variance) using the function *adonis2* of vegan package.
 ```{r Stat for beta diversity, echo=TRUE}
-Condition <-dt$Date
 res <- adonis2(dist ~ Site + Date, data = dt, by = "margin")
 res
 ```
