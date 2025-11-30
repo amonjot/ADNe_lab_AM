@@ -17,7 +17,7 @@ set.seed(123) # Set the seed to a specific value (here 123) in order to ensure r
 # working directory
 getwd() # Display current working directory
 setwd(".") # Set working directory
-if (dir.exists("result/") == FALSE) {system("mkdir -p result/")} # Create result directory if it does not already exists
+if (dir.exists("result/") == FALSE) {dir.create("result/")} # Create result directory if it does not already exists
 ```
 
 ### I.B. Library 
@@ -50,7 +50,7 @@ maxMismatch <- 0 # Maximum number of mismatch between the forward and the revers
 Nthread <- 4 # Number of core to use during  steps necessitating multitasking (i.e. paste the "nproc" command in the terminal window to know the number of available core on your computer)
 FWD <- "CCAGCASCYGCGGTAATTCC" # Forward primer sequence
 REV <- "ACTTTCGTTCTTGATYRA" # Reverse primer sequence
-if (dir.exists(paste0("result/",result)) == FALSE) { system(paste0("mkdir -p result/",result)) } # Create the output in the result directory
+if (dir.exists(paste0("result/",result)) == FALSE) { dir.create(paste0("result/",result)) } # Create the output in the result directory
 ```
 
 ## II. ASV denoising
@@ -81,7 +81,7 @@ fnRs.filtN <- file.path("filtN", basename(fnRs))
 out <- filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN,
               maxN = maxN, multithread = Nthread,
               trimLeft=c(nchar(FWD),nchar(REV)),
-              maxEE=maxEE, minQ = 2,
+              maxEE=maxEE, minQ = minQ,
               compress=TRUE, verbose=TRUE)
 ```
 
